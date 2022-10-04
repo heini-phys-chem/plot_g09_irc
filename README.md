@@ -12,4 +12,4 @@ Run:
 ```
 ./plot_irc.py <gaussian log file> <order>
 ```
-The *<order>* is either *react-prod* or *prod-react*.
+The *order* is either *react-prod* or *prod-react*.
