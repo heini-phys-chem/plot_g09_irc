@@ -14,22 +14,31 @@ NAMES = {1:'H', 6:'C', 8:'O'}
 def read_data(f):
     return cclib.io.ccread(f)
 
-def extract_properties(data):
+def extract_properties(data, rp_order):
     energies = data.scfenergies
 
-    energies -= energies[-1] # substract reactant energy from all points
+    for i, e in enumerate(energies):
+        if i == 0: continue
+        if energies[i] - energies[i-1] > 0:
+            react_min_idx = i-1
+
+    if rp_order == "prod-react":
+        energies -= energies[-1] # substract reactant energy from all points
+    elif rp_order == "react-prod":
+        energies -= energies[react_min_idx]
+    else:
+        print("Please choose a reactant and product order ('react-prod' or 'prod-react')")
+        exit()
+
     energies *= 23 # convert from eV to kcal/mol
 
     coords = data.atomcoords
 
     labels = data.atomnos
     numAtoms = data.natom
-#    print()
-#    for i, atom in enumerate(coords[0]):
-#        print(labels[i], atom[0], atom[1], atom[2])
 
 
-    return energies, coords, labels, numAtoms
+    return energies, coords, labels, numAtoms, react_min_idx
 
 def plot_irc(y):
     x = np.linspace(0, y.shape[0], y.shape[0])
@@ -44,35 +53,46 @@ def plot_irc(y):
 
     plt.tight_layout()
 
-    fig.savefig("tmp.png")
+    fig.savefig("irc.png")
 
 
-def split_energies(energies):
+def split_energies(energies, rp_order, react_min_idx):
     e_react = np.array([])
     e_prod  = np.array([])
 
-    for i, e in enumerate(energies):
-        if i == 0: continue
-        if energies[i] - energies[i-1] > 0:
-            j = i
-    for i in range(j):
-        e_prod = np.append(e_prod, energies[i])
-    for i in range(j+1, energies.shape[0]):
-        e_react = np.append(e_react, energies[i])
+    if rp_order == "prod-react":
+        for i in range(react_min_idx):
+            e_prod = np.append(e_prod, energies[i])
+        for i in range(react_min_idx+1, energies.shape[0]):
+            e_react = np.append(e_react, energies[i])
 
-    e_react = np.flip(e_react)
+        e_react = np.flip(e_react)
+
+    elif rp_order == "react-prod":
+        for i in range(react_min_idx):
+            e_react = np.append(e_react, energies[i])
+        for i in range(react_min_idx+1, energies.shape[0]):
+            e_prod = np.append(e_prod, energies[i])
+
+        e_react = np.flip(e_react)
+
 
     return e_react, e_prod
 
-def write_coords(coords, labels, numAtoms):
-    print(coords.shape)
+def write_coords(coords, labels, numAtoms, rp_order, react_min_idx):
     coords_prod  = []
     coords_react = []
 
-    for i in range(52):
-        coords_prod.append(coords[i])
-    for i in range(52, coords.shape[0]):
-        coords_react.append(coords[i])
+    if rp_order == "prod-react":
+        for i in range(react_min_idx):
+            coords_prod.append(coords[i])
+        for i in range(react_min_idx, coords.shape[0]):
+            coords_react.append(coords[i])
+    else:
+        for i in range(react_min_idx):
+            coords_react.append(coords[i])
+        for i in range(react_min_idx, coords.shape[0]):
+            coords_prod.append(coords[i])
 
 
     coords_react.reverse()
@@ -93,18 +113,18 @@ def write_coords(coords, labels, numAtoms):
 
 
 def main():
-    filename = sys.argv[1]
+    filename         = sys.argv[1]
+    react_prod_order = sys.argv[2]
 
     data = read_data(filename)
 
-    energies, coords, labels, numAtoms = extract_properties(data)
-    e_react, e_prod = split_energies(energies)
+    energies, coords, labels, numAtoms, react_min_idx = extract_properties(data, react_prod_order)
+    e_react, e_prod = split_energies(energies, react_prod_order, react_min_idx)
     energies = np.concatenate((e_react, e_prod), axis=0)
 
-    coords = write_coords(coords, labels, numAtoms)
+    coords = write_coords(coords, labels, numAtoms, react_prod_order, react_min_idx+1)
 
     plot_irc(energies)
-    print(coords.shape)
 
 
 if __name__ == '__main__':
